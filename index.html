@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AutoCare Log — Mantenimiento de Vehículos</title>
+<meta name="theme-color" content="#0d0f15">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --ink:#e9edf4; --muted:#9aa4b2; --line:#253241;
+  --pri:#1dd6b3; --pri2:#66f0cf; --acc:#7aa2f7;
+  --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+  --radius:16px; --gap:14px; --shadow:0 12px 28px rgba(0,0,0,.35);
+  --font: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", Inter, Roboto, Arial;
+}
+
+/* Fondo (elige en Configuración) */
+body.bg-transparent{ background:transparent!important; }
+body.bg-dark{
+  background: linear-gradient(180deg,#0b0d13 0%, #0e111a 60%, #0d0f15 100%) !important;
+}
+
+/* Base */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0; font-family:var(--font); color:var(--ink); letter-spacing:.2px}
+
+/* Header glass */
+header{
+  position:sticky; top:0; z-index:80;
+  background:rgba(10,14,18,.35)!important;
+  backdrop-filter:saturate(140%) blur(12px);
+  -webkit-backdrop-filter:saturate(140%) blur(12px);
+  border-bottom:1px solid rgba(255,255,255,.14)
+}
+.topbar{display:flex; align-items:center; gap:12px; padding:12px 14px}
+.logo{width:36px; height:36px; border-radius:10px; background:#000; object-fit:cover}
+.brand{font-weight:800}
+.badge{font-size:12px; color:var(--muted)}
+.grow{flex:1}
+.btn{
+  display:inline-flex; align-items:center; gap:8px; border-radius:12px;
+  padding:9px 12px; cursor:pointer; border:1px solid var(--line)
+}
+.btn.primary{
+  background:linear-gradient(180deg,var(--pri2),var(--pri));
+  color:#05211b; font-weight:800; border:none
+}
+.btn.ghost{
+  background:rgba(17,24,37,.55);
+  color:var(--ink);
+  backdrop-filter: blur(8px) saturate(130%);
+  -webkit-backdrop-filter: blur(8px) saturate(130%);
+}
+.backBtn{display:none}
+.tag{display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+  border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px}
+.warnBanner{background:rgba(245,158,11,.18); border:1px solid rgba(245,158,11,.45); padding:8px 10px; border-radius:10px; color:#ffd699}
+
+/* Layout + tarjetas */
+.container{max-width:980px; margin:18px auto; padding:0 14px}
+.card{
+  background:rgba(15,25,34,.45);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:16px; margin-bottom:16px;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+.h{display:flex; align-items:center; gap:10px; margin-bottom:10px}
+.h h2{margin:0; font-size:18px}
+.row{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--gap)}
+@media (max-width:900px){ .row{grid-template-columns:1fr} }
+input,select,textarea{
+  width:100%; padding:10px 12px;
+  background:rgba(12,20,30,.55);
+  color:var(--ink); border:1px solid var(--line); border-radius:12px; outline:none
+}
+.notice{padding:10px 12px; border:1px dashed var(--line); border-radius:10px; color:var(--muted)}
+.hidden{display:none!important}
+.small{font-size:12px; color:var(--muted)}
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+
+/* HOME */
+.homeGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+@media (max-width:900px){ .homeGrid{grid-template-columns:repeat(2,1fr)} }
+.tile{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+  padding:18px; min-height:140px; border-radius:16px;
+  background:rgba(18,28,40,.45);
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+  transition:.08s transform, .1s outline;
+  text-align:center; user-select:none; cursor:pointer;
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+.tile:hover{ outline:2px solid var(--pri) } .tile:active{ transform:scale(.98) }
+.tile .iconWrap{width:64px; height:64px; border-radius:14px; display:grid; place-items:center;
+  background:rgba(11,17,28,.55); border:1px solid #223046}
+.tile svg{width:34px; height:34px}
+.tile .title{font-weight:800} .tile .sub{font-size:12px; color:var(--muted)}
+/* Asegurar que los SVG no roben el click en móviles viejos */
+.tile svg, .tile .iconWrap { pointer-events: none; }
+.tile { pointer-events: auto; }
+
+/* Tablas */
+.table{width:100%; border-collapse:collapse; font-size:14px}
+.table th,.table td{border-bottom:1px solid var(--line); padding:10px 8px; text-align:left; vertical-align:top}
+.st{display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px}
+.st.ok{background:rgba(34,197,94,.2); border:1px solid rgba(34,197,94,.5)}
+.st.warn{background:rgba(245,158,11,.18); border:1px solid rgba(245,158,11,.5)}
+.st.bad{background:rgba(239,68,68,.18); border:1px solid rgba(239,68,68,.5)}
+
+/* Widget próximos */
+.widget{ display:grid; grid-template-columns:1fr; gap:12px; }
+.widget .item{
+  display:flex; gap:10px; align-items:center;
+  background:rgba(18,28,40,.45); border:1px solid var(--line); border-radius:12px; padding:10px;
+}
+.widget .item .name{font-weight:700}
+.widget .item .due{margin-left:auto; font-size:12px; color:var(--muted)}
+.widget .badge{padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line)}
+.widget .badge.bad{border-color:rgba(239,68,68,.5); background:rgba(239,68,68,.18)}
+.widget .badge.warn{border-color:rgba(245,158,11,.5); background:rgba(245,158,11,.18)}
+.widget .badge.ok{border-color:rgba(34,197,94,.5); background:rgba(34,197,94,.18)}
+</style>
+</head>
+<body class="bg-dark">
+<header>
+  <div class="topbar">
+    <button id="btnBackHome" class="btn ghost backBtn" title="Regresar al menú">← Menú principal</button>
+    <img id="appLogo" class="logo" alt="Logo">
+    <div>
+      <div class="brand">AutoCare Log</div>
+      <div class="badge">Mantenimiento • Historial • Recordatorios</div>
+    </div>
+    <span class="grow"></span>
+    <span id="vehicleBadge" class="tag">Sin vehículo</span>
+  </div>
+</header>
+
+<div class="container">
+  <!-- HOME -->
+  <section id="page-home" class="card">
+    <div class="h">
+      <h2>Menú principal</h2>
+      <span class="tag">Elige una función</span>
+    </div>
+
+    <!-- Widget de próximos 7 días / atrasados -->
+    <div id="homeWidget" class="card" style="margin-top:8px">
+      <div class="h">
+        <h2>Próximos 7 días</h2>
+        <span id="notifStatus" class="tag">Notificaciones: —</span>
+      </div>
+      <div id="homeWidgetBody" class="widget"></div>
+      <div id="notifBanner" class="warnBanner hidden" style="margin-top:10px">
+        Las notificaciones están bloqueadas por el navegador. Ve a <b>Configuración → Notificaciones</b> para habilitarlas.
+      </div>
+    </div>
+
+    <div class="homeGrid" id="homeGrid" style="margin-top:12px">
+      <div class="tile" data-go="vehicles"><div class="iconWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M4 12h16l-2-6H6z"/><circle cx="7" cy="16" r="2"/><circle cx="17" cy="16" r="2"/></svg>
+      </div><div class="title">Vehículos</div><div class="sub">Agregar/seleccionar</div></div>
+
+      <div class="tile" data-go="schedule"><div class="iconWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 4h18v18H3z"/><path d="M3 10h18"/><path d="M8 2v4M16 2v4"/></svg>
+      </div><div class="title">Mantenimientos</div><div class="sub">Programar & pendientes</div></div>
+
+      <div class="tile" data-go="history"><div class="iconWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M12 8v5l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+      </div><div class="title">Historial</div><div class="sub">Servicios realizados</div></div>
+
+      <div class="tile" data-go="export"><div class="iconWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+      </div><div class="title">Exportar</div><div class="sub">PDF del historial</div></div>
+
+      <div class="tile" data-go="settings"><div class="iconWrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+          <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.5-1z"/>
+        </svg>
+      </div><div class="title">Configuración</div><div class="sub">Tema/Logo/Fondo</div></div>
+    </div>
+  </section>
+
+  <!-- VEHICLES -->
+  <section id="page-vehicles" class="card hidden">
+    <div class="h"><h2>Vehículos</h2><span class="tag">Gestiona varios</span></div>
+    <div class="row">
+      <div class="card">
+        <h3 style="margin-top:0">Agregar / Editar</h3>
+        <label>Nombre / Alias</label><input id="vName" placeholder="Mi Corolla"/>
+        <label>Marca</label><input id="vMake" placeholder="Toyota"/>
+        <label>Modelo</label><input id="vModel" placeholder="Corolla"/>
+        <label>Año</label><input id="vYear" type="number" placeholder="2019"/>
+        <label>Kilometraje actual</label><input id="vOdo" type="number" placeholder="123456"/>
+        <div style="display:flex; gap:10px; margin-top:10px">
+          <button id="btnSaveVehicle" class="btn primary">Guardar</button>
+          <button id="btnClearVehicle" class="btn ghost">Limpiar</button>
+        </div>
+        <div class="small" style="margin-top:8px">Sugerencia: actualiza el odómetro cuando marques un servicio realizado.</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Mis vehículos</h3>
+        <div id="vehicleList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCHEDULE -->
+  <section id="page-schedule" class="card hidden">
+    <div class="h"><h2>Mantenimientos</h2><span class="tag">Por tiempo y/o kilómetros</span></div>
+    <div class="row">
+      <div class="card">
+        <h3 style="margin-top:0">Nueva tarea</h3>
+        <label>Tarea</label><input id="tName" placeholder="Cambio de aceite"/>
+        <div class="row">
+          <div><label>Intervalo (días)</label><input id="tDays" type="number" placeholder="180"></div>
+          <div><label>Intervalo (km)</label><input id="tKm" type="number" placeholder="8000"></div>
+        </div>
+        <div class="row">
+          <div><label>Último servicio (fecha)</label><input id="tLastDate" type="date"></div>
+          <div><label>Último servicio (km)</label><input id="tLastKm" type="number" placeholder="115000"></div>
+        </div>
+        <label>Notas</label><textarea id="tNotes" rows="3" placeholder="Aceite 5W-30 sintético"></textarea>
+        <div style="display:flex; gap:10px; margin-top:10px">
+          <button id="btnAddTask" class="btn primary">Añadir</button>
+          <button id="btnOnlyDue" class="btn ghost">Ver solo pendientes</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Programadas</h3>
+        <div id="taskList"></div>
+        <div class="notice" style="margin-top:10px">El estado se calcula con la fecha y el odómetro actual del vehículo seleccionado.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="page-history" class="card hidden">
+    <div class="h"><h2>Historial</h2><span class="tag">Servicios realizados</span></div>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- EXPORT -->
+  <section id="page-export" class="card hidden">
+    <div class="h"><h2>Exportar</h2><span class="tag">PDF de historial y pendientes</span></div>
+    <div class="row">
+      <div class="card">
+        <h3 style="margin-top:0">Generar PDF</h3>
+        <label>Cliente / Propietario</label><input id="xOwner" placeholder="Nombre del propietario">
+        <label>Notas del reporte</label><textarea id="xNotes" rows="5" placeholder="Observaciones..."></textarea>
+        <div style="display:flex; gap:10px; margin-top:10px">
+          <button id="btnGenPDF" class="btn primary">Generar PDF</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Resumen</h3>
+        <div id="exportSummary" class="notice">Selecciona un vehículo para ver el resumen.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="page-settings" class="card hidden">
+    <div class="h"><h2>Configuración</h2><span class="tag">Tema, logo, fondo y notificaciones</span></div>
+    <div class="row">
+      <div class="card">
+        <h3 style="margin-top:0">Visual</h3>
+        <label>Subir logo</label><input type="file" id="logoFile" accept="image/*"/>
+        <label>Color primario</label><input type="color" id="colorPri" value="#1dd6b3" />
+        <label>Fondo de la app</label>
+        <select id="bgMode">
+          <option value="transparent">Transparente (usar fondo externo)</option>
+          <option value="dark" selected>Oscuro (negro/degradado)</option>
+        </select>
+        <div style="display:flex; gap:10px; margin-top:10px">
+          <button id="btnSaveTheme" class="btn primary">Guardar</button>
+          <button id="btnResetTheme" class="btn ghost">Restablecer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Notificaciones</h3>
+        <div class="notice">Las notificaciones funcionan cuando la app está abierta o en segundo plano en el navegador. Para alertas con la app cerrada, conviértela en PWA + Push.</div>
+        <label>Estado</label>
+        <div style="display:flex; gap:10px; align-items:center">
+          <span id="permState" class="tag">—</span>
+          <button id="btnAskPerm" class="btn ghost">Solicitar permiso</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Activar recordatorios</label>
+            <select id="notifEnabled">
+              <option value="off">Desactivado</option>
+              <option value="on">Activado</option>
+            </select>
+          </div>
+          <div>
+            <label>Días de anticipación</label>
+            <input id="notifLeadDays" type="number" min="0" value="3" />
+          </div>
+        </div>
+        <div class="small" style="margin-top:6px">Se notificará si faltan ≤ “días de anticipación” o si está atrasado. También por km si restan ≤200 km.</div>
+        <div style="display:flex; gap:10px; margin-top:10px">
+          <button id="btnSaveNotif" class="btn primary">Guardar notificaciones</button>
+          <button id="btnTestNotif" class="btn ghost">Probar notificación</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ====== Polyfills y utilidades base (compatibilidad) ====== */
+(function(){
+  if (!Element.prototype.closest) {
+    Element.prototype.closest = function(s) {
+      var el = this;
+      while (el && el.nodeType === 1) {
+        if (el.matches && el.matches(s)) return el;
+        el = el.parentElement || el.parentNode;
+      }
+      return null;
+    };
+  }
+  if (!window.crypto) window.crypto = {};
+  if (!window.crypto.randomUUID) {
+    window.crypto.randomUUID = function(){ return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2); };
+  }
+})();
+
+function $(s){ return document.querySelector(s); }
+function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function fileToDataURL(file){ return new Promise(function(res){ var r=new FileReader(); r.onload=function(){res(r.result)}; r.readAsDataURL(file); }); }
+
+function nowISO(){ return new Date().toISOString().slice(0,10); }
+function km(n){ return isFinite(n)? Number(n): null; }
+function daysBetween(a,b){ return Math.floor((new Date(b)-new Date(a))/(1000*60*60*24)); }
+
+/* ====== Constantes de almacenamiento ====== */
+var STORE='acl.store.v1', BRAND='acl.brand', PREF='acl.prefs';
+var S = { data:{ vehicles:[], selected:null }, onlyDue:false, notifTimer:null };
+
+/* ====== Persistencia ====== */
+function load(){ try{ return JSON.parse(localStorage.getItem(STORE)||'{"vehicles":[]}'); }catch(e){ return {vehicles:[]}; } }
+function save(){ localStorage.setItem(STORE, JSON.stringify(S.data)); }
+function loadBrand(){ try{ return JSON.parse(localStorage.getItem(BRAND)||'{}'); }catch(e){ return {}; } }
+function saveBrand(v){ localStorage.setItem(BRAND, JSON.stringify(v)); }
+function loadPrefs(){ try{ return JSON.parse(localStorage.getItem(PREF)||'{}'); }catch(e){ return {}; } }
+function savePrefs(p){ localStorage.setItem(PREF, JSON.stringify(p)); }
+
+/* ====== Router robusto ====== */
+var _pages=['home','vehicles','schedule','history','export','settings'];
+function go(p){
+  for (var i=0;i<_pages.length;i++){
+    var el=document.getElementById('page-'+_pages[i]);
+    if (el) el.classList.add('hidden');
+  }
+  var tgt=document.getElementById('page-'+p);
+  if (tgt) tgt.classList.remove('hidden');
+  var back=document.getElementById('btnBackHome');
+  if (back) back.style.display = (p!=='home') ? 'inline-flex' : 'none';
+  window.scrollTo(0,0);
+  if(p==='home') renderHomeWidget();
+}
+var homeGrid=document.getElementById('homeGrid');
+if(homeGrid){
+  homeGrid.addEventListener('click', function(e){
+    var tile = e.target.closest('.tile');
+    if(!tile) return;
+    var page = tile.getAttribute('data-go');
+    if(page) go(page);
+  }, false);
+}
+var backBtn=document.getElementById('btnBackHome');
+if(backBtn){ backBtn.addEventListener('click', function(){ go('home'); }, false); }
+
+/* ====== Tema y logo ====== */
+function applyThemeFromPrefs(){
+  var prefs=loadPrefs();
+  var mode=prefs.bgMode||'dark';
+  document.body.classList.remove('bg-transparent','bg-dark');
+  document.body.classList.add('bg-'+(mode==='transparent'?'transparent':'dark'));
+  var meta=document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', mode==='transparent'?'transparent':'#0d0f15');
+  if(prefs.pri) document.documentElement.style.setProperty('--pri', prefs.pri);
+  var brand=loadBrand(); if(brand.logo) { var lg=$('#appLogo'); if(lg) lg.src=brand.logo; }
+
+  var ne=$('#notifEnabled'); if(ne) ne.value = (prefs.notifEnabled==='on'?'on':'off');
+  var nld=$('#notifLeadDays'); if(nld) nld.value = prefs.notifLeadDays!=null ? prefs.notifLeadDays : 3;
+  updatePermState();
+  updateNotifStatusBadge();
+}
+function bindThemeControls(){
+  var bgMode=$('#bgMode'); if(bgMode) bgMode.addEventListener('change', function(e){
+    var prefs=loadPrefs(); prefs.bgMode=e.target.value; savePrefs(prefs); applyThemeFromPrefs();
+  });
+  var colorPri=$('#colorPri'); if(colorPri) colorPri.addEventListener('input', function(e){
+    var v=e.target.value; var prefs=loadPrefs(); prefs.pri=v; savePrefs(prefs); document.documentElement.style.setProperty('--pri', v);
+  });
+  var btnSaveTheme=$('#btnSaveTheme'); if(btnSaveTheme) btnSaveTheme.addEventListener('click', function(){ alert('Tema guardado.'); });
+  var btnResetTheme=$('#btnResetTheme'); if(btnResetTheme) btnResetTheme.addEventListener('click', function(){ localStorage.removeItem(PREF); localStorage.removeItem(BRAND); location.reload(); });
+  var logoFile=$('#logoFile'); if(logoFile) logoFile.addEventListener('change', function(e){
+    var f=e.target.files[0]; if(!f) return;
+    fileToDataURL(f).then(function(img){ var brand=loadBrand(); brand.logo=img; saveBrand(brand); applyThemeFromPrefs(); });
+  });
+}
+
+/* ====== Vehículos ====== */
+function currentVehicle(){ 
+  var arr=S.data.vehicles||[]; 
+  for(var i=0;i<arr.length;i++){ if(arr[i].id===S.data.selected) return arr[i]; }
+  return null;
+}
+function updateBadge(){
+  var v=currentVehicle(); var vb=$('#vehicleBadge');
+  if(!vb) return;
+  vb.textContent = v? ((v.name||v.make||'Vehículo') + ' • ' + (v.odo!=null?v.odo:0) + ' km') : 'Sin vehículo';
+}
+function renderVehicleList(){
+  var wrap=$("#vehicleList"); if(!wrap) return;
+  if(!S.data.vehicles.length){ wrap.innerHTML='<div class="notice">Aún no hay vehículos. Agrega uno a la izquierda.</div>'; updateBadge(); return; }
+  var html = '<table class="table"><thead><tr><th>Alias</th><th>MMY</th><th>Odómetro</th><th>Acciones</th></tr></thead><tbody>';
+  for(var i=0;i<S.data.vehicles.length;i++){
+    var v=S.data.vehicles[i];
+    html += '<tr>'
+      + '<td>'+ (v.name||'-') +'</td>'
+      + '<td>'+ (v.make||'') +' '+ (v.model||'') +' '+ (v.year||'') +'</td>'
+      + '<td class="mono">'+ (v.odo!=null?v.odo:'—') +' km</td>'
+      + '<td>'
+      + '<button class="btn ghost" data-act="select" data-id="'+v.id+'">Seleccionar</button> '
+      + '<button class="btn ghost" data-act="edit" data-id="'+v.id+'">Editar</button> '
+      + '<button class="btn ghost" data-act="del" data-id="'+v.id+'">Borrar</button>'
+      + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  var btns = wrap.querySelectorAll('button[data-act]');
+  for(var j=0;j<btns.length;j++){
+    btns[j].onclick=function(){
+      var id=this.getAttribute('data-id');
+      var act=this.getAttribute('data-act');
+      var idx=-1; for(var k=0;k<S.data.vehicles.length;k++){ if(S.data.vehicles[k].id===id){ idx=k; break; } }
+      if(idx<0) return;
+      if(act==='select'){ S.data.selected=id; save(); updateBadge(); renderTasks(); renderHistory(); updateExportSummary(); renderHomeWidget(); alert('Vehículo seleccionado'); }
+      if(act==='edit'){ var v=S.data.vehicles[idx]; $('#vName').value=v.name||''; $('#vMake').value=v.make||''; $('#vModel').value=v.model||''; $('#vYear').value=v.year||''; $('#vOdo').value=v.odo!=null?v.odo:''; }
+      if(act==='del'){ if(confirm('¿Eliminar vehículo y todos sus datos?')){ S.data.vehicles.splice(idx,1); if(S.data.selected===id) S.data.selected=null; save(); renderVehicleList(); renderTasks(); renderHistory(); updateExportSummary(); updateBadge(); renderHomeWidget(); } }
+    };
+  }
+}
+function bindVehicleForm(){
+  var btnSave=$('#btnSaveVehicle'); if(btnSave) btnSave.onclick=function(){
+    var v={ name:($('#vName').value||'').trim(), make:($('#vMake').value||'').trim(), model:($('#vModel').value||'').trim(), year:($('#vYear').value||'').trim(), odo:km($('#vOdo').value), tasks:[], history:[], id:crypto.randomUUID() };
+    if(!v.make && !v.name){ alert('Pon al menos un alias o la marca.'); return; }
+    S.data.vehicles.push(v); S.data.selected=v.id; save();
+    $('#vName').value=$('#vMake').value=$('#vModel').value=$('#vYear').value=$('#vOdo').value='';
+    renderVehicleList(); updateBadge(); renderHomeWidget(); alert('Vehículo guardado.');
+  };
+  var btnClear=$('#btnClearVehicle'); if(btnClear) btnClear.onclick=function(){ $('#vName').value=$('#vMake').value=$('#vModel').value=$('#vYear').value=$('#vOdo').value=''; };
+}
+
+/* ====== Tareas ====== */
+function addDays(iso, d){ var dt=new Date(iso||nowISO()); dt.setDate(dt.getDate()+Number(d||0)); return dt.toISOString().slice(0,10); }
+function fmtLeft(n,unit){ if(n==null) return ''; var s = unit==='d'?'días':'km'; return n>=0? ('faltan '+n+' '+s) : ('atraso '+Math.abs(n)+' '+s); }
+function makeDetails(dueDate,daysLeft,kmDue,kmLeft){
+  var a=[]; if(dueDate) a.push('fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(kmDue!=null) a.push('km: '+kmDue+' ('+fmtLeft(kmLeft,'km')+')'); return a.join(' • ');
+}
+function isDue(x){ return (x.daysLeft!=null && x.daysLeft<=7) || (x.kmLeft!=null && x.kmLeft<=500) || (x.daysLeft!=null && x.daysLeft<0) || (x.kmLeft!=null && x.kmLeft<0); }
+function score(x){ var d = x.daysLeft==null? 9999 : x.daysLeft; var k = x.kmLeft==null? 999999 : x.kmLeft; return (d<0? d*10 : d) + (k<0? k/100 : k/1000); }
+function badge(st){ return '<span class="st '+(st==='bad'?'bad':st==='warn'?'warn':'ok')+'">'+(st==='bad'?'Atrasado':st==='warn'?'Pronto':'Al día')+'</span>'; }
+
+function renderTasks(){
+  var v=currentVehicle(); var wrap=$("#taskList"); if(!wrap) return;
+  if(!v){ wrap.innerHTML='<div class="notice">Selecciona un vehículo en la sección “Vehículos”.</div>'; return; }
+  if(!v.tasks || !v.tasks.length){ wrap.innerHTML='<div class="notice">No hay tareas aún. Crea una con el formulario.</div>'; return; }
+
+  var today=nowISO();
+  var rows = [];
+  for(var i=0;i<v.tasks.length;i++){
+    var t=v.tasks[i];
+    var dueByDate = t.days? addDays(t.lastDate||today, t.days) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null;
+    var daysLeft = dueByDate? (daysBetween(today, dueByDate)) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var status='ok';
+    if(daysLeft!=null){ if(daysLeft<=7) status='warn'; if(daysLeft<0) status='bad'; }
+    if(kmLeft!=null){ if(kmLeft<=500) status=(status==='bad'?'bad':'warn'); if(kmLeft<0) status='bad'; }
+    rows.push({ t:t, status:status, details:makeDetails(dueByDate,daysLeft,kmDue,kmLeft), daysLeft:daysLeft, kmLeft:kmLeft });
+  }
+  if(S.onlyDue){
+    rows = rows.filter(isDue);
+  }
+  rows.sort(function(a,b){ return score(a)-score(b); });
+
+  var html='<table class="table"><thead><tr><th>Tarea</th><th>Intervalo</th><th>Último</th><th>Próximo</th><th>Acciones</th></tr></thead><tbody>';
+  for(var j=0;j<rows.length;j++){
+    var x=rows[j], t=x.t, vcur=currentVehicle();
+    var nextDate = t.days? addDays(t.lastDate||nowISO(), t.days): '—';
+    var nextKm = t.km? (((t.lastKm!=null)?t.lastKm:(vcur&&vcur.odo!=null?vcur.odo:0))+t.km): '—';
+    html += '<tr>'
+      + '<td><b>'+t.name+'</b><div class="small">'+(t.notes||'')+'</div></td>'
+      + '<td>'+(t.days?(t.days+' días'):'—')+' / '+(t.km?(t.km+' km'):'—')+'</td>'
+      + '<td><div>'+(t.lastDate||'—')+' • '+(t.lastKm!=null?(t.lastKm+' km'):'—')+'</div></td>'
+      + '<td>'+badge(x.status)+'<div class="small">'+(x.details||'—')+'</div></td>'
+      + '<td>'
+      + '<button class="btn ghost" data-act="done" data-id="'+t.id+'">Marcar hecho</button> '
+      + '<button class="btn ghost" data-act="edit" data-id="'+t.id+'">Editar</button> '
+      + '<button class="btn ghost" data-act="del" data-id="'+t.id+'">Borrar</button>'
+      + '</td></tr>';
+  }
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+
+  var btns=wrap.querySelectorAll('button[data-act]');
+  for(var k=0;k<btns.length;k++){
+    btns[k].onclick=function(){
+      var id=this.getAttribute('data-id'); var act=this.getAttribute('data-act');
+      var v=currentVehicle(); if(!v) return;
+      var i=-1; for(var m=0;m<v.tasks.length;m++){ if(v.tasks[m].id===id){ i=m; break; } }
+      if(i<0) return;
+      if(act==='edit'){ var tt=v.tasks[i]; $('#tName').value=tt.name||''; $('#tDays').value=tt.days||''; $('#tKm').value=tt.km||''; $('#tLastDate').value=tt.lastDate||''; $('#tLastKm').value=tt.lastKm!=null?tt.lastKm:''; $('#tNotes').value=tt.notes||''; }
+      if(act==='del'){ if(confirm('¿Eliminar esta tarea?')){ v.tasks.splice(i,1); save(); renderTasks(); renderHomeWidget(); } }
+      if(act==='done'){
+        var doneDate=prompt('Fecha realizada (YYYY-MM-DD):', nowISO())||nowISO();
+        var doneKm = Number(prompt('Odómetro al realizar:', v.odo!=null?v.odo:0));
+        v.history = v.history||[];
+        v.history.unshift({ id:crypto.randomUUID(), task:v.tasks[i].name, date:doneDate, odo:isFinite(doneKm)?doneKm:null, notes:v.tasks[i].notes||'' });
+        v.tasks[i].lastDate = doneDate;
+        v.tasks[i].lastKm = isFinite(doneKm)? doneKm : v.tasks[i].lastKm;
+        if(isFinite(doneKm) && (v.odo==null || doneKm>v.odo)) v.odo = doneKm;
+        save(); renderTasks(); renderHistory(); updateBadge(); updateExportSummary(); renderHomeWidget();
+        clearLastNotifiedFor(v.id, v.tasks[i].id);
+      }
+    };
+  }
+}
+function bindTaskForm(){
+  var btnAdd=$('#btnAddTask'); if(btnAdd) btnAdd.onclick=function(){
+    var v=currentVehicle(); if(!v){ alert('Selecciona un vehículo primero.'); return; }
+    var t={ id:crypto.randomUUID(), name:($('#tName').value||'').trim(), days: Number($('#tDays').value)||null, km: Number($('#tKm').value)||null, lastDate:($('#tLastDate').value||null), lastKm: km($('#tLastKm').value), notes:($('#tNotes').value||'').trim() };
+    if(!t.name || (!t.days && !t.km)){ alert('Pon un nombre y al menos un intervalo (días o km).'); return; }
+    v.tasks=v.tasks||[]; v.tasks.push(t); save();
+    $('#tName').value=$('#tDays').value=$('#tKm').value=$('#tLastDate').value=$('#tLastKm').value=$('#tNotes').value='';
+    renderTasks(); renderHomeWidget(); alert('Tarea agregada.');
+  };
+  var btnOnlyDue=$('#btnOnlyDue'); if(btnOnlyDue) btnOnlyDue.onclick=function(){ S.onlyDue=!S.onlyDue; btnOnlyDue.textContent = S.onlyDue? 'Ver todas' : 'Ver solo pendientes'; renderTasks(); };
+}
+
+/* ====== Historial ====== */
+function renderHistory(){
+  var v=currentVehicle(); var wrap=$("#historyList"); if(!wrap) return;
+  if(!v){ wrap.innerHTML='<div class="notice">Selecciona un vehículo.</div>'; return; }
+  if(!v.history || !v.history.length){ wrap.innerHTML='<div class="notice">Aún no hay servicios registrados.</div>'; return; }
+  var html='<table class="table"><thead><tr><th>Fecha</th><th>Tarea</th><th>Odómetro</th><th>Notas</th><th>Acciones</th></tr></thead><tbody>';
+  for(var i=0;i<v.history.length;i++){
+    var h=v.history[i];
+    html+='<tr><td class="mono">'+(h.date||'—')+'</td><td>'+ (h.task||'—') +'</td><td class="mono">'+(h.odo!=null?(h.odo+' km'):'—')+'</td><td>'+(h.notes||'')+'</td>'
+      +'<td><button class="btn ghost" data-del="'+h.id+'">Borrar</button></td></tr>';
+  }
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+  var btns=wrap.querySelectorAll('button[data-del]');
+  for(var j=0;j<btns.length;j++){
+    btns[j].onclick=function(){ var id=this.getAttribute('data-del'); var v=currentVehicle(); var i=-1; for(var k=0;k<v.history.length;k++){ if(v.history[k].id===id){ i=k; break; } } if(i>=0){ v.history.splice(i,1); save(); renderHistory(); } };
+  }
+}
+
+/* ====== Export/PDF ====== */
+function updateExportSummary(){
+  var wrap=$("#exportSummary"); var v=currentVehicle(); if(!wrap) return;
+  if(!v){ wrap.innerHTML='Selecciona un vehículo en Vehículos.'; return; }
+  var pending = (v.tasks||[]).map(function(t){
+    var dueDate = t.days? addDays(t.lastDate||nowISO(), t.days): null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km): null;
+    return { t:t, dueDate:dueDate, kmDue:kmDue };
+  });
+  wrap.innerHTML = ''
+    + '<div><b>Vehículo:</b> '+(v.name||'')+' '+(v.make||'')+' '+(v.model||'')+' '+(v.year||'')+'</div>'
+    + '<div><b>Odómetro:</b> '+(v.odo!=null?v.odo:'—')+' km</div>'
+    + '<hr>'
+    + '<div><b>Tareas:</b> '+((v.tasks&&v.tasks.length)||0)+'</div>'
+    + '<div><b>Historial:</b> '+((v.history&&v.history.length)||0)+' registros</div>'
+    + '<div style="margin-top:8px" class="small">Pendientes (estimado):<br>'
+    + pending.map(function(p){ return '• '+p.t.name+' — fecha: '+(p.dueDate||'—')+' / km: '+(p.kmDue!=null?p.kmDue:'—'); }).join('<br>')
+    + '</div>';
+}
+var btnGenPDF=document.getElementById('btnGenPDF');
+if(btnGenPDF) btnGenPDF.onclick=function(){
+  var v=currentVehicle(); if(!v){ alert('Selecciona un vehículo.'); return; }
+  var jsPDF=window.jspdf.jsPDF; var doc=new jsPDF({unit:'pt',format:'a4'});
+  var y=48, x=48, line=18; var brand=loadBrand();
+  if(brand.logo){ try{ doc.addImage(brand.logo,'PNG', x,y,80,80);}catch(e){} }
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('AutoCare Log — Reporte de Mantenimiento', x+(brand.logo?100:0), y+20);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(new Date().toLocaleString(), x+(brand.logo?100:0), y+40); y+=100;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Vehículo', x, y); y+=line;
+  doc.setFont('helvetica','normal'); doc.text('Alias: '+(v.name||'-'), x, y); y+=line;
+  doc.text('MMY: '+(v.make||'-')+' '+(v.model||'')+' '+(v.year||''), x, y); y+=line;
+  doc.text('Odómetro: '+(v.odo!=null?v.odo:'-')+' km', x, y); y+=line;
+  var owner=($('#xOwner')&&$('#xOwner').value)||''; var notes=($('#xNotes')&&$('#xNotes').value)||'';
+  y+=line/2; doc.setFont('helvetica','bold'); doc.text('Cliente / Notas', x, y); y+=line;
+  doc.setFont('helvetica','normal'); if(owner){ doc.text('Cliente: '+owner, x, y); y+=line; }
+  if(notes){ var arr=doc.splitTextToSize(notes, 520); doc.text(arr, x, y); y+=arr.length*line; }
+  y+=line/2; doc.setFont('helvetica','bold'); doc.text('Tareas programadas (próximos)', x, y); y+=line;
+  doc.setFont('helvetica','normal');
+  for(var i=0;i<(v.tasks||[]).length;i++){
+    var t=v.tasks[i];
+    var dueDate = t.days? addDays(t.lastDate||nowISO(), t.days): '—';
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km): '—';
+    doc.text('• '+t.name+'  /  Último: '+(t.lastDate||'—')+' • '+(t.lastKm!=null?(t.lastKm+' km'):'—')+'  /  Próximo: '+dueDate+' • '+kmDue, x, y); y+=line;
+    if(y>740){ doc.addPage(); y=48; }
+  }
+  y+=line/2; doc.setFont('helvetica','bold'); doc.text('Historial', x, y); y+=line;
+  doc.setFont('helvetica','normal');
+  for(var j=0;j<(v.history||[]).length;j++){
+    var h=v.history[j];
+    doc.text('• '+(h.date||'—')+' — '+(h.task||'—')+' — '+(h.odo!=null?(h.odo+' km'):'—')+' — '+(h.notes||''), x, y); y+=line;
+    if(y>740){ doc.addPage(); y=48; }
+  }
+  doc.save('AutoCareLog_'+((v.name||v.make||'vehiculo').replace(/\s/g,''))+'_'+(new Date().toISOString().slice(0,10))+'.pdf');
+};
+
+/* ====== Notificaciones ====== */
+function canNotify(){ return "Notification" in window; }
+function perm(){ return canNotify()? Notification.permission : 'denied'; }
+function updatePermState(){
+  var p=perm(); var ps=$('#permState'); if(ps) ps.textContent = 'Permiso: '+p;
+  var nb=$('#notifBanner'); if(nb) nb.classList.toggle('hidden', p==='granted');
+}
+var btnAskPerm=$('#btnAskPerm');
+if(btnAskPerm) btnAskPerm.onclick=function(){
+  if(!canNotify()){ alert('Este navegador no soporta notificaciones.'); return; }
+  Notification.requestPermission().then(function(){ updatePermState(); updateNotifStatusBadge(); if(perm()==='granted'){ new Notification('🔔 Notificaciones activadas', { body:'AutoCare Log podrá avisarte de mantenimientos.' }); } });
+};
+var btnSaveNotif=$('#btnSaveNotif');
+if(btnSaveNotif) btnSaveNotif.onclick=function(){
+  var prefs=loadPrefs();
+  var en=$('#notifEnabled'); var ld=$('#notifLeadDays');
+  prefs.notifEnabled = (en && en.value==='on')?'on':'off';
+  prefs.notifLeadDays = Math.max(0, Number(ld&&ld.value)||0);
+  prefs.notifSeen = prefs.notifSeen || {};
+  savePrefs(prefs);
+  updateNotifStatusBadge();
+  startNotifLoop();
+  alert('Preferencias de notificaciones guardadas.');
+};
+var btnTestNotif=$('#btnTestNotif');
+if(btnTestNotif) btnTestNotif.onclick=function(){
+  if(perm()!=='granted'){ alert('Otorga permiso primero.'); return; }
+  new Notification('🔧 Prueba de AutoCare Log', { body:'Esto es una notificación de prueba.', tag:'acl-test' });
+};
+
+function updateNotifStatusBadge(){
+  var prefs=loadPrefs();
+  var txt = (prefs.notifEnabled==='on' && perm()==='granted')? ('Notificaciones: activas (D-'+(prefs.notifLeadDays!=null?prefs.notifLeadDays:3)+')') :
+            (prefs.notifEnabled==='on' && perm()!=='granted')? 'Notificaciones: permiso requerido' :
+            'Notificaciones: apagadas';
+  var ns=$('#notifStatus'); if(ns) ns.textContent=txt;
+}
+function startNotifLoop(){
+  clearInterval(S.notifTimer);
+  var prefs=loadPrefs();
+  var enabled = (prefs.notifEnabled==='on' && perm()==='granted');
+  if(!enabled) return;
+  S.notifTimer = setInterval(checkAndNotify, 60*1000);
+  checkAndNotify();
+}
+function clearLastNotifiedFor(vid, tid){
+  var prefs=loadPrefs(); prefs.notifSeen = prefs.notifSeen||{}; delete prefs.notifSeen[vid+':'+tid]; savePrefs(prefs);
+}
+function checkAndNotify(){
+  var v=currentVehicle(); if(!v) return;
+  var prefs=loadPrefs(); var lead = prefs.notifLeadDays!=null?prefs.notifLeadDays:3; prefs.notifSeen = prefs.notifSeen||{};
+  var today=nowISO();
+  var tasks=v.tasks||[];
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];
+    var dueDate = t.days? addDays(t.lastDate||today, t.days) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null;
+    var daysLeft = dueDate? daysBetween(today, dueDate) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var isSoon = (daysLeft!=null && daysLeft<=lead) || (kmLeft!=null && kmLeft<=200);
+    var isOver = (daysLeft!=null && daysLeft<0) || (kmLeft!=null && kmLeft<0);
+    if(!(isSoon||isOver)) continue;
+    var key = v.id+':'+t.id;
+    var todayKey = new Date().toISOString().slice(0,10);
+    if(prefs.notifSeen[key] === todayKey) continue;
+    var title = isOver? ('⚠️ '+t.name+' atrasado') : ('🔔 '+t.name+' próximo');
+    var parts=[]; if(daysLeft!=null) parts.push('Fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(kmDue!=null) parts.push('KM: '+kmDue+' ('+fmtLeft(kmLeft,'km')+')');
+    var body = (v.name||v.make||'Vehículo')+' • '+parts.join(' • ');
+    try{ new Notification(title, { body:body, tag:key }); }catch(e){}
+    prefs.notifSeen[key] = todayKey; savePrefs(prefs);
+  }
+}
+
+/* ====== Widget Home ====== */
+function renderHomeWidget(){
+  var body=document.getElementById('homeWidgetBody'); var v=currentVehicle();
+  updatePermState(); updateNotifStatusBadge();
+  if(!body) return;
+  if(!v){ body.innerHTML='<div class="notice">Selecciona un vehículo en “Vehículos”.</div>'; return; }
+  var today=nowISO();
+  var items=[];
+  var tasks=v.tasks||[];
+  for(var i=0;i<tasks.length;i++){
+    var t=tasks[i];
+    var dueDate = t.days? addDays(t.lastDate||today, t.days) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km) : null;
+    var daysLeft = dueDate? daysBetween(today, dueDate) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var status='ok';
+    if(daysLeft!=null){ if(daysLeft<=7) status='warn'; if(daysLeft<0) status='bad'; }
+    if(kmLeft!=null){ if(kmLeft<=500) status=(status==='bad'?'bad':'warn'); if(kmLeft<0) status='bad'; }
+    if(status!=='ok'){
+      items.push({t:t, dueDate:dueDate, kmDue:kmDue, daysLeft:daysLeft, kmLeft:kmLeft, status:status});
+    }
+  }
+  items.sort(function(a,b){ return score({daysLeft:a.daysLeft,kmLeft:a.kmLeft}) - score({daysLeft:b.daysLeft,kmLeft:b.kmLeft}); });
+  items = items.slice(0,10);
+  if(!items.length){ body.innerHTML='<div class="notice">No hay mantenimientos próximos ni atrasados.</div>'; return; }
+  var html='';
+  for(var j=0;j<items.length;j++){
+    var x=items[j];
+    html += '<div class="item">'
+      + '<span class="badge '+x.status+'">'+(x.status==='bad'?'Atrasado':'Pronto')+'</span>'
+      + '<div class="name">'+x.t.name+'</div>'
+      + '<div class="due">'+makeDetails(x.dueDate,x.daysLeft,x.kmDue,x.kmLeft)+'</div>'
+      + '</div>';
+  }
+  body.innerHTML=html;
+}
+
+/* ====== Arranque ====== */
+(function boot(){
+  S.data = load();
+  if(!S.data.selected && S.data.vehicles.length) S.data.selected = S.data.vehicles[0].id;
+
+  // pintar
+  renderVehicleList(); renderTasks(); renderHistory(); updateExportSummary(); updateBadge(); renderHomeWidget();
+  // enlazar eventos
+  bindVehicleForm(); bindTaskForm(); bindThemeControls();
+  // tema
+  applyThemeFromPrefs();
+  // por si algo dejó todo oculto:
+  var home=document.getElementById('page-home');
+  if(!home || home.classList.contains('hidden')) go('home');
+  // notificaciones loop
+  startNotifLoop();
+})();
+</script>
+</body>
+</html>
