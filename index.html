@@ -13,12 +13,22 @@
   --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444;
   --radius:16px; --gap:14px; --shadow:0 12px 28px rgba(0,0,0,.35);
   --font: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", Inter, Roboto, Arial;
+  /* Fondo imagen */
+  --bg-dim:.6;               /* opacidad del velo negro */
+  --bg-url: none;            /* se setea dinámicamente como: url('...') */
 }
 
 /* Fondo (elige en Configuración) */
 body.bg-transparent{ background:transparent!important; }
 body.bg-dark{
   background: linear-gradient(180deg,#0b0d13 0%, #0e111a 60%, #0d0f15 100%) !important;
+}
+/* NUEVO: Fondo con imagen + velo oscuro transparente */
+body.bg-image{ background: transparent !important; }
+body.bg-image::before{
+  content:""; position:fixed; inset:0; z-index:-1;
+  background-image: linear-gradient(180deg, rgba(0,0,0,var(--bg-dim)), rgba(0,0,0, calc(var(--bg-dim) + .15))), var(--bg-url);
+  background-size: cover; background-position: center; background-attachment: fixed;
 }
 
 /* Base */
@@ -282,7 +292,21 @@ input,select,textarea{
         <select id="bgMode">
           <option value="transparent">Transparente (usar fondo externo)</option>
           <option value="dark" selected>Oscuro (negro/degradado)</option>
+          <option value="image">Imagen personalizada + velo negro</option>
         </select>
+        <div id="bgImageControls" class="hidden" style="margin-top:10px">
+          <label>Subir imagen de fondo</label>
+          <input type="file" id="bgFile" accept="image/*"/>
+          <label style="margin-top:6px">o URL de imagen</label>
+          <input id="bgUrl" placeholder="https://ejemplo.com/fondo.jpg"/>
+          <label style="margin-top:6px">Oscurecer fondo (velo)</label>
+          <input type="range" id="bgDim" min="0" max="0.9" step="0.05" value="0.6"/>
+          <div class="small">Consejo: entre 0.5 y 0.7 da un look "glass" legible.</div>
+          <div style="display:flex; gap:10px; margin-top:10px">
+            <button id="btnSaveBg" class="btn primary">Guardar fondo</button>
+            <button id="btnClearBg" class="btn ghost">Quitar fondo</button>
+          </div>
+        </div>
         <div style="display:flex; gap:10px; margin-top:10px">
           <button id="btnSaveTheme" class="btn primary">Guardar</button>
           <button id="btnResetTheme" class="btn ghost">Restablecer</button>
@@ -399,15 +423,32 @@ if(backBtn){ backBtn.addEventListener('click', function(){ go('home'); }, false)
 function applyThemeFromPrefs(){
   var prefs=loadPrefs();
   var mode=prefs.bgMode||'dark';
-  document.body.classList.remove('bg-transparent','bg-dark');
-  document.body.classList.add('bg-'+(mode==='transparent'?'transparent':'dark'));
+  document.body.classList.remove('bg-transparent','bg-dark','bg-image');
+  if(mode==='transparent'){
+    document.body.classList.add('bg-transparent');
+  } else if(mode==='image'){
+    document.body.classList.add('bg-image');
+  } else {
+    document.body.classList.add('bg-dark');
+  }
   var meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', mode==='transparent'?'transparent':'#0d0f15');
+  if(meta) meta.setAttribute('content', mode==='dark' ? '#0d0f15' : 'transparent');
+
   if(prefs.pri) document.documentElement.style.setProperty('--pri', prefs.pri);
   var brand=loadBrand(); if(brand.logo) { var lg=$('#appLogo'); if(lg) lg.src=brand.logo; }
 
+  // NUEVO: aplicar imagen y velo
+  if(prefs.bgImage){ document.documentElement.style.setProperty('--bg-url', 'url("'+prefs.bgImage.replace(/"/g,'\\"')+'")'); }
+  else { document.documentElement.style.setProperty('--bg-url', 'none'); }
+  var dim = (prefs.bgDim!=null? prefs.bgDim : 0.6);
+  document.documentElement.style.setProperty('--bg-dim', String(dim));
+
+  // Controles
   var ne=$('#notifEnabled'); if(ne) ne.value = (prefs.notifEnabled==='on'?'on':'off');
   var nld=$('#notifLeadDays'); if(nld) nld.value = prefs.notifLeadDays!=null ? prefs.notifLeadDays : 3;
+  var bgMode=$('#bgMode'); if(bgMode) bgMode.value = mode;
+  var bgCtrls=$('#bgImageControls'); if(bgCtrls) bgCtrls.classList.toggle('hidden', mode!=='image');
+  var bgDim=$('#bgDim'); if(bgDim) bgDim.value = dim;
   updatePermState();
   updateNotifStatusBadge();
 }
@@ -424,6 +465,21 @@ function bindThemeControls(){
     var f=e.target.files[0]; if(!f) return;
     fileToDataURL(f).then(function(img){ var brand=loadBrand(); brand.logo=img; saveBrand(brand); applyThemeFromPrefs(); });
   });
+
+  // NUEVO: Controles de imagen de fondo
+  var bgFile=$('#bgFile'); if(bgFile) bgFile.addEventListener('change', function(e){
+    var f=e.target.files[0]; if(!f) return; fileToDataURL(f).then(function(img){ $('#bgUrl').value=''; var prefs=loadPrefs(); prefs.bgImage=img; savePrefs(prefs); applyThemeFromPrefs(); });
+  });
+  var bgUrl=$('#bgUrl'); if(bgUrl) bgUrl.addEventListener('change', function(e){
+    var url=(e.target.value||'').trim(); if(!url) return; var prefs=loadPrefs(); prefs.bgImage=url; savePrefs(prefs); applyThemeFromPrefs();
+  });
+  var bgDim=$('#bgDim'); if(bgDim) bgDim.addEventListener('input', function(e){
+    var v=Number(e.target.value)||0.6; document.documentElement.style.setProperty('--bg-dim', String(v));
+  });
+  var btnSaveBg=$('#btnSaveBg'); if(btnSaveBg) btnSaveBg.addEventListener('click', function(){
+    var prefs=loadPrefs(); var dimEl=$('#bgDim'); prefs.bgDim = Number(dimEl&&dimEl.value)||0.6; savePrefs(prefs); applyThemeFromPrefs(); alert('Fondo guardado.');
+  });
+  var btnClearBg=$('#btnClearBg'); if(btnClearBg) btnClearBg.addEventListener('click', function(){ var prefs=loadPrefs(); delete prefs.bgImage; savePrefs(prefs); applyThemeFromPrefs(); alert('Fondo eliminado.'); });
 }
 
 /* ====== Vehículos ====== */
@@ -472,7 +528,7 @@ function renderVehicleList(){
 function bindVehicleForm(){
   var btnSave=$('#btnSaveVehicle'); if(btnSave) btnSave.onclick=function(){
     var odoUI = Number($('#vOdo').value); // usuario escribe en mi
-    var v={ name:($('#vName').value||'').trim(), make:($('#vMake').value||'').trim(), model:($('#vModel').value||'').trim(), year:($('#vYear').value||'').trim(), odo:UNIT.toBase(odoUI), tasks:[], history:[], id:crypto.randomUUID() };
+    var v={ name:(($('#vName').value)||'').trim(), make:(($('#vMake').value)||'').trim(), model:(($('#vModel').value)||'').trim(), year:(($('#vYear').value)||'').trim(), odo:UNIT.toBase(odoUI), tasks:[], history:[], id:crypto.randomUUID() };
     if(!v.make && !v.name){ alert('Pon al menos un alias o la marca.'); return; }
     S.data.vehicles.push(v); S.data.selected=v.id; save();
     $('#vName').value=$('#vMake').value=$('#vModel').value=$('#vYear').value=$('#vOdo').value='';
@@ -571,7 +627,7 @@ function bindTaskForm(){
     var v=currentVehicle(); if(!v){ alert('Selecciona un vehículo primero.'); return; }
     var tKmUI = Number($('#tKm').value);           // UI en millas
     var tLastKmUI = Number($('#tLastKm').value);   // UI en millas
-    var t={ id:crypto.randomUUID(), name:($('#tName').value||'').trim(), days: Number($('#tDays').value)||null, km: isFinite(tKmUI)? UNIT.toBase(tKmUI) : null, lastDate:($('#tLastDate').value||null), lastKm: isFinite(tLastKmUI)? UNIT.toBase(tLastKmUI) : null, notes:($('#tNotes').value||'').trim() };
+    var t={ id:crypto.randomUUID(), name:(($('#tName').value)||'').trim(), days: Number($('#tDays').value)||null, km: isFinite(tKmUI)? UNIT.toBase(tKmUI) : null, lastDate:(($('#tLastDate').value)||null), lastKm: isFinite(tLastKmUI)? UNIT.toBase(tLastKmUI) : null, notes:(($('#tNotes').value)||'').trim() };
     if(!t.name || (!t.days && !t.km)){ alert('Pon un nombre y al menos un intervalo (días o millas).'); return; }
     v.tasks=v.tasks||[]; v.tasks.push(t); save();
     $('#tName').value=$('#tDays').value=$('#tKm').value=$('#tLastDate').value=$('#tLastKm').value=$('#tNotes').value='';
@@ -786,3 +842,4 @@ function renderHomeWidget(){
 </script>
 </body>
 </html>
+
