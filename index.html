@@ -202,7 +202,7 @@ input,select,textarea{
         <label>Marca</label><input id="vMake" placeholder="Toyota"/>
         <label>Modelo</label><input id="vModel" placeholder="Corolla"/>
         <label>Año</label><input id="vYear" type="number" placeholder="2019"/>
-        <label>Kilometraje actual</label><input id="vOdo" type="number" placeholder="123456"/>
+        <label>Odómetro actual (mi)</label><input id="vOdo" type="number" placeholder="123456"/>
         <div style="display:flex; gap:10px; margin-top:10px">
           <button id="btnSaveVehicle" class="btn primary">Guardar</button>
           <button id="btnClearVehicle" class="btn ghost">Limpiar</button>
@@ -218,18 +218,18 @@ input,select,textarea{
 
   <!-- SCHEDULE -->
   <section id="page-schedule" class="card hidden">
-    <div class="h"><h2>Mantenimientos</h2><span class="tag">Por tiempo y/o kilómetros</span></div>
+    <div class="h"><h2>Mantenimientos</h2><span class="tag">Por tiempo y/o millas</span></div>
     <div class="row">
       <div class="card">
         <h3 style="margin-top:0">Nueva tarea</h3>
         <label>Tarea</label><input id="tName" placeholder="Cambio de aceite"/>
         <div class="row">
           <div><label>Intervalo (días)</label><input id="tDays" type="number" placeholder="180"></div>
-          <div><label>Intervalo (km)</label><input id="tKm" type="number" placeholder="8000"></div>
+          <div><label>Intervalo (mi)</label><input id="tKm" type="number" placeholder="5000"></div>
         </div>
         <div class="row">
           <div><label>Último servicio (fecha)</label><input id="tLastDate" type="date"></div>
-          <div><label>Último servicio (km)</label><input id="tLastKm" type="number" placeholder="115000"></div>
+          <div><label>Último servicio (mi)</label><input id="tLastKm" type="number" placeholder="71500"></div>
         </div>
         <label>Notas</label><textarea id="tNotes" rows="3" placeholder="Aceite 5W-30 sintético"></textarea>
         <div style="display:flex; gap:10px; margin-top:10px">
@@ -310,7 +310,7 @@ input,select,textarea{
             <input id="notifLeadDays" type="number" min="0" value="3" />
           </div>
         </div>
-        <div class="small" style="margin-top:6px">Se notificará si faltan ≤ “días de anticipación” o si está atrasado. También por km si restan ≤200 km.</div>
+        <div class="small" style="margin-top:6px">Se notificará si faltan ≤ “días de anticipación” o si está atrasado. También por millas si restan ≤125 mi.</div>
         <div style="display:flex; gap:10px; margin-top:10px">
           <button id="btnSaveNotif" class="btn primary">Guardar notificaciones</button>
           <button id="btnTestNotif" class="btn ghost">Probar notificación</button>
@@ -344,8 +344,18 @@ function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s));
 function fileToDataURL(file){ return new Promise(function(res){ var r=new FileReader(); r.onload=function(){res(r.result)}; r.readAsDataURL(file); }); }
 
 function nowISO(){ return new Date().toISOString().slice(0,10); }
-function km(n){ return isFinite(n)? Number(n): null; }
+function km(n){ return isFinite(n)? Number(n): null; } // parser numérico simple
 function daysBetween(a,b){ return Math.floor((new Date(b)-new Date(a))/(1000*60*60*24)); }
+
+/* ====== Unidades (UI en millas, base en km) ====== */
+var USE_MILES = true;                // cambia a false si quieres UI en km
+var MI_IN_KM = 1.60934;
+var UNIT = {
+  label: USE_MILES ? 'mi' : 'km',
+  toBase: function(n){ n=Number(n); return isFinite(n) ? (USE_MILES ? n*MI_IN_KM : n) : null; },
+  fromBase: function(n){ n=Number(n); return isFinite(n) ? (USE_MILES ? n/MI_IN_KM : n) : null; }
+};
+function uRound(n){ var v=UNIT.fromBase(n); return v==null? null : Math.round(v); }
 
 /* ====== Constantes de almacenamiento ====== */
 var STORE='acl.store.v1', BRAND='acl.brand', PREF='acl.prefs';
@@ -425,7 +435,7 @@ function currentVehicle(){
 function updateBadge(){
   var v=currentVehicle(); var vb=$('#vehicleBadge');
   if(!vb) return;
-  vb.textContent = v? ((v.name||v.make||'Vehículo') + ' • ' + (v.odo!=null?v.odo:0) + ' km') : 'Sin vehículo';
+  vb.textContent = v? ((v.name||v.make||'Vehículo') + ' • ' + (uRound(v.odo)!=null?uRound(v.odo):0) + ' ' + UNIT.label) : 'Sin vehículo';
 }
 function renderVehicleList(){
   var wrap=$("#vehicleList"); if(!wrap) return;
@@ -436,7 +446,7 @@ function renderVehicleList(){
     html += '<tr>'
       + '<td>'+ (v.name||'-') +'</td>'
       + '<td>'+ (v.make||'') +' '+ (v.model||'') +' '+ (v.year||'') +'</td>'
-      + '<td class="mono">'+ (v.odo!=null?v.odo:'—') +' km</td>'
+      + '<td class="mono">'+ (uRound(v.odo)!=null?uRound(v.odo):'—') +' '+UNIT.label+'</td>'
       + '<td>'
       + '<button class="btn ghost" data-act="select" data-id="'+v.id+'">Seleccionar</button> '
       + '<button class="btn ghost" data-act="edit" data-id="'+v.id+'">Editar</button> '
@@ -454,14 +464,15 @@ function renderVehicleList(){
       var idx=-1; for(var k=0;k<S.data.vehicles.length;k++){ if(S.data.vehicles[k].id===id){ idx=k; break; } }
       if(idx<0) return;
       if(act==='select'){ S.data.selected=id; save(); updateBadge(); renderTasks(); renderHistory(); updateExportSummary(); renderHomeWidget(); alert('Vehículo seleccionado'); }
-      if(act==='edit'){ var v=S.data.vehicles[idx]; $('#vName').value=v.name||''; $('#vMake').value=v.make||''; $('#vModel').value=v.model||''; $('#vYear').value=v.year||''; $('#vOdo').value=v.odo!=null?v.odo:''; }
+      if(act==='edit'){ var v=S.data.vehicles[idx]; $('#vName').value=v.name||''; $('#vMake').value=v.make||''; $('#vModel').value=v.model||''; $('#vYear').value=v.year||''; $('#vOdo').value=uRound(v.odo)!=null?uRound(v.odo):''; }
       if(act==='del'){ if(confirm('¿Eliminar vehículo y todos sus datos?')){ S.data.vehicles.splice(idx,1); if(S.data.selected===id) S.data.selected=null; save(); renderVehicleList(); renderTasks(); renderHistory(); updateExportSummary(); updateBadge(); renderHomeWidget(); } }
     };
   }
 }
 function bindVehicleForm(){
   var btnSave=$('#btnSaveVehicle'); if(btnSave) btnSave.onclick=function(){
-    var v={ name:($('#vName').value||'').trim(), make:($('#vMake').value||'').trim(), model:($('#vModel').value||'').trim(), year:($('#vYear').value||'').trim(), odo:km($('#vOdo').value), tasks:[], history:[], id:crypto.randomUUID() };
+    var odoUI = Number($('#vOdo').value); // usuario escribe en mi
+    var v={ name:($('#vName').value||'').trim(), make:($('#vMake').value||'').trim(), model:($('#vModel').value||'').trim(), year:($('#vYear').value||'').trim(), odo:UNIT.toBase(odoUI), tasks:[], history:[], id:crypto.randomUUID() };
     if(!v.make && !v.name){ alert('Pon al menos un alias o la marca.'); return; }
     S.data.vehicles.push(v); S.data.selected=v.id; save();
     $('#vName').value=$('#vMake').value=$('#vModel').value=$('#vYear').value=$('#vOdo').value='';
@@ -472,9 +483,12 @@ function bindVehicleForm(){
 
 /* ====== Tareas ====== */
 function addDays(iso, d){ var dt=new Date(iso||nowISO()); dt.setDate(dt.getDate()+Number(d||0)); return dt.toISOString().slice(0,10); }
-function fmtLeft(n,unit){ if(n==null) return ''; var s = unit==='d'?'días':'km'; return n>=0? ('faltan '+n+' '+s) : ('atraso '+Math.abs(n)+' '+s); }
+function fmtLeft(n,unit){ if(n==null) return ''; var s = unit==='d'?'días':UNIT.label; return n>=0? ('faltan '+n+' '+s) : ('atraso '+Math.abs(n)+' '+s); }
 function makeDetails(dueDate,daysLeft,kmDue,kmLeft){
-  var a=[]; if(dueDate) a.push('fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(kmDue!=null) a.push('km: '+kmDue+' ('+fmtLeft(kmLeft,'km')+')'); return a.join(' • ');
+  // kmDue/kmLeft están en km base; convertir a UI
+  var miDue = kmDue!=null? uRound(kmDue) : null;
+  var miLeft = kmLeft!=null? uRound(kmLeft) : null;
+  var a=[]; if(dueDate) a.push('fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(miDue!=null) a.push(UNIT.label+': '+miDue+' ('+fmtLeft(miLeft,'km')+')'); return a.join(' • ');
 }
 function isDue(x){ return (x.daysLeft!=null && x.daysLeft<=7) || (x.kmLeft!=null && x.kmLeft<=500) || (x.daysLeft!=null && x.daysLeft<0) || (x.kmLeft!=null && x.kmLeft<0); }
 function score(x){ var d = x.daysLeft==null? 9999 : x.daysLeft; var k = x.kmLeft==null? 999999 : x.kmLeft; return (d<0? d*10 : d) + (k<0? k/100 : k/1000); }
@@ -490,28 +504,26 @@ function renderTasks(){
   for(var i=0;i<v.tasks.length;i++){
     var t=v.tasks[i];
     var dueByDate = t.days? addDays(t.lastDate||today, t.days) : null;
-    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null; // en km base
     var daysLeft = dueByDate? (daysBetween(today, dueByDate)) : null;
-    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null; // en km base
     var status='ok';
     if(daysLeft!=null){ if(daysLeft<=7) status='warn'; if(daysLeft<0) status='bad'; }
     if(kmLeft!=null){ if(kmLeft<=500) status=(status==='bad'?'bad':'warn'); if(kmLeft<0) status='bad'; }
     rows.push({ t:t, status:status, details:makeDetails(dueByDate,daysLeft,kmDue,kmLeft), daysLeft:daysLeft, kmLeft:kmLeft });
   }
-  if(S.onlyDue){
-    rows = rows.filter(isDue);
-  }
+  if(S.onlyDue){ rows = rows.filter(isDue); }
   rows.sort(function(a,b){ return score(a)-score(b); });
 
   var html='<table class="table"><thead><tr><th>Tarea</th><th>Intervalo</th><th>Último</th><th>Próximo</th><th>Acciones</th></tr></thead><tbody>';
   for(var j=0;j<rows.length;j++){
     var x=rows[j], t=x.t, vcur=currentVehicle();
     var nextDate = t.days? addDays(t.lastDate||nowISO(), t.days): '—';
-    var nextKm = t.km? (((t.lastKm!=null)?t.lastKm:(vcur&&vcur.odo!=null?vcur.odo:0))+t.km): '—';
+    var nextKm = t.km? (((t.lastKm!=null)?t.lastKm:(vcur&&vcur.odo!=null?vcur.odo:0))+t.km): '—'; // km base
     html += '<tr>'
       + '<td><b>'+t.name+'</b><div class="small">'+(t.notes||'')+'</div></td>'
-      + '<td>'+(t.days?(t.days+' días'):'—')+' / '+(t.km?(t.km+' km'):'—')+'</td>'
-      + '<td><div>'+(t.lastDate||'—')+' • '+(t.lastKm!=null?(t.lastKm+' km'):'—')+'</div></td>'
+      + '<td>'+(t.days?(t.days+' días'):'—')+' / '+(t.km?(Math.round(UNIT.fromBase(t.km))+' '+UNIT.label):'—')+'</td>'
+      + '<td><div>'+(t.lastDate||'—')+' • '+(t.lastKm!=null?(Math.round(UNIT.fromBase(t.lastKm))+' '+UNIT.label):'—')+'</div></td>'
       + '<td>'+badge(x.status)+'<div class="small">'+(x.details||'—')+'</div></td>'
       + '<td>'
       + '<button class="btn ghost" data-act="done" data-id="'+t.id+'">Marcar hecho</button> '
@@ -529,11 +541,20 @@ function renderTasks(){
       var v=currentVehicle(); if(!v) return;
       var i=-1; for(var m=0;m<v.tasks.length;m++){ if(v.tasks[m].id===id){ i=m; break; } }
       if(i<0) return;
-      if(act==='edit'){ var tt=v.tasks[i]; $('#tName').value=tt.name||''; $('#tDays').value=tt.days||''; $('#tKm').value=tt.km||''; $('#tLastDate').value=tt.lastDate||''; $('#tLastKm').value=tt.lastKm!=null?tt.lastKm:''; $('#tNotes').value=tt.notes||''; }
+      if(act==='edit'){
+        var tt=v.tasks[i];
+        $('#tName').value=tt.name||'';
+        $('#tDays').value=tt.days||'';
+        $('#tKm').value=tt.km!=null? Math.round(UNIT.fromBase(tt.km)) : '';
+        $('#tLastDate').value=tt.lastDate||'';
+        $('#tLastKm').value=tt.lastKm!=null? Math.round(UNIT.fromBase(tt.lastKm)) : '';
+        $('#tNotes').value=tt.notes||'';
+      }
       if(act==='del'){ if(confirm('¿Eliminar esta tarea?')){ v.tasks.splice(i,1); save(); renderTasks(); renderHomeWidget(); } }
       if(act==='done'){
         var doneDate=prompt('Fecha realizada (YYYY-MM-DD):', nowISO())||nowISO();
-        var doneKm = Number(prompt('Odómetro al realizar:', v.odo!=null?v.odo:0));
+        var doneMi = Number(prompt('Odómetro al realizar (mi):', uRound(v.odo)!=null?uRound(v.odo):0));
+        var doneKm = UNIT.toBase(doneMi);
         v.history = v.history||[];
         v.history.unshift({ id:crypto.randomUUID(), task:v.tasks[i].name, date:doneDate, odo:isFinite(doneKm)?doneKm:null, notes:v.tasks[i].notes||'' });
         v.tasks[i].lastDate = doneDate;
@@ -548,8 +569,10 @@ function renderTasks(){
 function bindTaskForm(){
   var btnAdd=$('#btnAddTask'); if(btnAdd) btnAdd.onclick=function(){
     var v=currentVehicle(); if(!v){ alert('Selecciona un vehículo primero.'); return; }
-    var t={ id:crypto.randomUUID(), name:($('#tName').value||'').trim(), days: Number($('#tDays').value)||null, km: Number($('#tKm').value)||null, lastDate:($('#tLastDate').value||null), lastKm: km($('#tLastKm').value), notes:($('#tNotes').value||'').trim() };
-    if(!t.name || (!t.days && !t.km)){ alert('Pon un nombre y al menos un intervalo (días o km).'); return; }
+    var tKmUI = Number($('#tKm').value);           // UI en millas
+    var tLastKmUI = Number($('#tLastKm').value);   // UI en millas
+    var t={ id:crypto.randomUUID(), name:($('#tName').value||'').trim(), days: Number($('#tDays').value)||null, km: isFinite(tKmUI)? UNIT.toBase(tKmUI) : null, lastDate:($('#tLastDate').value||null), lastKm: isFinite(tLastKmUI)? UNIT.toBase(tLastKmUI) : null, notes:($('#tNotes').value||'').trim() };
+    if(!t.name || (!t.days && !t.km)){ alert('Pon un nombre y al menos un intervalo (días o millas).'); return; }
     v.tasks=v.tasks||[]; v.tasks.push(t); save();
     $('#tName').value=$('#tDays').value=$('#tKm').value=$('#tLastDate').value=$('#tLastKm').value=$('#tNotes').value='';
     renderTasks(); renderHomeWidget(); alert('Tarea agregada.');
@@ -562,10 +585,10 @@ function renderHistory(){
   var v=currentVehicle(); var wrap=$("#historyList"); if(!wrap) return;
   if(!v){ wrap.innerHTML='<div class="notice">Selecciona un vehículo.</div>'; return; }
   if(!v.history || !v.history.length){ wrap.innerHTML='<div class="notice">Aún no hay servicios registrados.</div>'; return; }
-  var html='<table class="table"><thead><tr><th>Fecha</th><th>Tarea</th><th>Odómetro</th><th>Notas</th><th>Acciones</th></tr></thead><tbody>';
+  var html='<table class="table"><thead><tr><th>Fecha</th><th>Tarea</th><th>Odómetro (mi)</th><th>Notas</th><th>Acciones</th></tr></thead><tbody>';
   for(var i=0;i<v.history.length;i++){
     var h=v.history[i];
-    html+='<tr><td class="mono">'+(h.date||'—')+'</td><td>'+ (h.task||'—') +'</td><td class="mono">'+(h.odo!=null?(h.odo+' km'):'—')+'</td><td>'+(h.notes||'')+'</td>'
+    html+='<tr><td class="mono">'+(h.date||'—')+'</td><td>'+ (h.task||'—') +'</td><td class="mono">'+(h.odo!=null?(uRound(h.odo)+' '+UNIT.label):'—')+'</td><td>'+(h.notes||'')+'</td>'
       +'<td><button class="btn ghost" data-del="'+h.id+'">Borrar</button></td></tr>';
   }
   html+='</tbody></table>';
@@ -582,17 +605,17 @@ function updateExportSummary(){
   if(!v){ wrap.innerHTML='Selecciona un vehículo en Vehículos.'; return; }
   var pending = (v.tasks||[]).map(function(t){
     var dueDate = t.days? addDays(t.lastDate||nowISO(), t.days): null;
-    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km): null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km): null; // base km
     return { t:t, dueDate:dueDate, kmDue:kmDue };
   });
   wrap.innerHTML = ''
     + '<div><b>Vehículo:</b> '+(v.name||'')+' '+(v.make||'')+' '+(v.model||'')+' '+(v.year||'')+'</div>'
-    + '<div><b>Odómetro:</b> '+(v.odo!=null?v.odo:'—')+' km</div>'
+    + '<div><b>Odómetro:</b> '+(uRound(v.odo)!=null?uRound(v.odo):'—')+' '+UNIT.label+'</div>'
     + '<hr>'
     + '<div><b>Tareas:</b> '+((v.tasks&&v.tasks.length)||0)+'</div>'
     + '<div><b>Historial:</b> '+((v.history&&v.history.length)||0)+' registros</div>'
     + '<div style="margin-top:8px" class="small">Pendientes (estimado):<br>'
-    + pending.map(function(p){ return '• '+p.t.name+' — fecha: '+(p.dueDate||'—')+' / km: '+(p.kmDue!=null?p.kmDue:'—'); }).join('<br>')
+    + pending.map(function(p){ return '• '+p.t.name+' — fecha: '+(p.dueDate||'—')+' / '+UNIT.label+': '+(p.kmDue!=null?uRound(p.kmDue):'—'); }).join('<br>')
     + '</div>';
 }
 var btnGenPDF=document.getElementById('btnGenPDF');
@@ -606,7 +629,7 @@ if(btnGenPDF) btnGenPDF.onclick=function(){
   doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Vehículo', x, y); y+=line;
   doc.setFont('helvetica','normal'); doc.text('Alias: '+(v.name||'-'), x, y); y+=line;
   doc.text('MMY: '+(v.make||'-')+' '+(v.model||'')+' '+(v.year||''), x, y); y+=line;
-  doc.text('Odómetro: '+(v.odo!=null?v.odo:'-')+' km', x, y); y+=line;
+  doc.text('Odómetro: '+(uRound(v.odo)!=null?uRound(v.odo):'-')+' '+UNIT.label, x, y); y+=line;
   var owner=($('#xOwner')&&$('#xOwner').value)||''; var notes=($('#xNotes')&&$('#xNotes').value)||'';
   y+=line/2; doc.setFont('helvetica','bold'); doc.text('Cliente / Notas', x, y); y+=line;
   doc.setFont('helvetica','normal'); if(owner){ doc.text('Cliente: '+owner, x, y); y+=line; }
@@ -617,14 +640,17 @@ if(btnGenPDF) btnGenPDF.onclick=function(){
     var t=v.tasks[i];
     var dueDate = t.days? addDays(t.lastDate||nowISO(), t.days): '—';
     var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km): '—';
-    doc.text('• '+t.name+'  /  Último: '+(t.lastDate||'—')+' • '+(t.lastKm!=null?(t.lastKm+' km'):'—')+'  /  Próximo: '+dueDate+' • '+kmDue, x, y); y+=line;
+    var lastKmTxt = (t.lastKm!=null? (uRound(t.lastKm)+' '+UNIT.label) : '—');
+    var dueKmTxt  = (kmDue!=='—'? (uRound(kmDue)+' '+UNIT.label) : '—');
+    doc.text('• '+t.name+'  /  Último: '+(t.lastDate||'—')+' • '+lastKmTxt+'  /  Próximo: '+dueDate+' • '+dueKmTxt, x, y); y+=line;
     if(y>740){ doc.addPage(); y=48; }
   }
   y+=line/2; doc.setFont('helvetica','bold'); doc.text('Historial', x, y); y+=line;
   doc.setFont('helvetica','normal');
   for(var j=0;j<(v.history||[]).length;j++){
     var h=v.history[j];
-    doc.text('• '+(h.date||'—')+' — '+(h.task||'—')+' — '+(h.odo!=null?(h.odo+' km'):'—')+' — '+(h.notes||''), x, y); y+=line;
+    var histMi = (h.odo!=null? (uRound(h.odo)+' '+UNIT.label) : '—');
+    doc.text('• '+(h.date||'—')+' — '+(h.task||'—')+' — '+histMi+' — '+(h.notes||''), x, y); y+=line;
     if(y>740){ doc.addPage(); y=48; }
   }
   doc.save('AutoCareLog_'+((v.name||v.make||'vehiculo').replace(/\s/g,''))+'_'+(new Date().toISOString().slice(0,10))+'.pdf');
@@ -686,9 +712,9 @@ function checkAndNotify(){
   for(var i=0;i<tasks.length;i++){
     var t=tasks[i];
     var dueDate = t.days? addDays(t.lastDate||today, t.days) : null;
-    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0)) + t.km) : null; // base km
     var daysLeft = dueDate? daysBetween(today, dueDate) : null;
-    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null; // base km
     var isSoon = (daysLeft!=null && daysLeft<=lead) || (kmLeft!=null && kmLeft<=200);
     var isOver = (daysLeft!=null && daysLeft<0) || (kmLeft!=null && kmLeft<0);
     if(!(isSoon||isOver)) continue;
@@ -696,7 +722,7 @@ function checkAndNotify(){
     var todayKey = new Date().toISOString().slice(0,10);
     if(prefs.notifSeen[key] === todayKey) continue;
     var title = isOver? ('⚠️ '+t.name+' atrasado') : ('🔔 '+t.name+' próximo');
-    var parts=[]; if(daysLeft!=null) parts.push('Fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(kmDue!=null) parts.push('KM: '+kmDue+' ('+fmtLeft(kmLeft,'km')+')');
+    var parts=[]; if(daysLeft!=null) parts.push('Fecha: '+dueDate+' ('+fmtLeft(daysLeft,'d')+')'); if(kmDue!=null) parts.push('MI: '+uRound(kmDue)+' ('+fmtLeft(uRound(kmLeft),'km')+')');
     var body = (v.name||v.make||'Vehículo')+' • '+parts.join(' • ');
     try{ new Notification(title, { body:body, tag:key }); }catch(e){}
     prefs.notifSeen[key] = todayKey; savePrefs(prefs);
@@ -715,9 +741,9 @@ function renderHomeWidget(){
   for(var i=0;i<tasks.length;i++){
     var t=tasks[i];
     var dueDate = t.days? addDays(t.lastDate||today, t.days) : null;
-    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km) : null;
+    var kmDue = t.km? ((t.lastKm!=null?t.lastKm:(v.odo!=null?v.odo:0))+t.km) : null; // base km
     var daysLeft = dueDate? daysBetween(today, dueDate) : null;
-    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null;
+    var kmLeft = (kmDue!=null && v.odo!=null)? (kmDue - v.odo) : null; // base km
     var status='ok';
     if(daysLeft!=null){ if(daysLeft<=7) status='warn'; if(daysLeft<0) status='bad'; }
     if(kmLeft!=null){ if(kmLeft<=500) status=(status==='bad'?'bad':'warn'); if(kmLeft<0) status='bad'; }
