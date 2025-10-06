@@ -98,6 +98,8 @@ input,select,textarea{ width:100%; padding:10px 12px; background:rgba(12,20,30,.
 .test-pass{color:#22c55e}
 .test-fail{color:#ef4444}
 </style>
+  <!-- OneSignal SDK -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
 <body class="bg-dark">
 <header>
@@ -236,6 +238,7 @@ input,select,textarea{ width:100%; padding:10px 12px; background:rgba(12,20,30,.
   </section>
 
   <!-- SETTINGS -->
+    <!-- SETTINGS -->
   <section id="page-settings" class="card hidden">
     <div class="h"><h2>Configuración</h2><span class="tag">Tema, logo, fondo y notificaciones</span></div>
     <div class="row">
@@ -271,8 +274,8 @@ input,select,textarea{ width:100%; padding:10px 12px; background:rgba(12,20,30,.
       </div>
 
       <div class="card">
-        <h3 style="margin-top:0">Notificaciones</h3>
-        <div class="notice">Las notificaciones funcionan cuando la app está abierta o en segundo plano en el navegador. Para alertas con la app cerrada, conviértela en PWA + Push.</div>
+        <h3 style="margin-top:0">Notificaciones (local)</h3>
+        <div class="notice">Las notificaciones locales funcionan cuando la app está abierta o en segundo plano. Para push con la app cerrada, usa OneSignal (abajo).</div>
         <label>Estado</label>
         <div style="display:flex; gap:10px; align-items:center">
           <span id="permState" class="tag">—</span>
@@ -296,6 +299,17 @@ input,select,textarea{ width:100%; padding:10px 12px; background:rgba(12,20,30,.
           <button id="btnSaveNotif" class="btn primary">Guardar notificaciones</button>
           <button id="btnTestNotif" class="btn ghost">Probar notificación</button>
         </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Push (OneSignal)</h3>
+        <div class="notice">Requiere HTTPS y service workers. El botón flotante de OneSignal se puede habilitar en la init.</div>
+        <div style="display:flex; gap:10px; align-items:center">
+          <span id="osState" class="tag">OneSignal: —</span>
+          <button id="btnOSPrompt" class="btn ghost">Suscribirse a Push</button>
+          <button id="btnOSUnsub" class="btn ghost">Anular suscripción</button>
+        </div>
+        <div class="small" style="margin-top:6px">ID de suscriptor: <span id="osSubId" class="mono">—</span></div>
       </div>
 
       <div class="card">
@@ -772,7 +786,66 @@ function runTests(){
   var tip=$('#btnShowConsoleTip'); if(tip) tip.addEventListener('click', function(){ alert('Para abrir la consola: Chrome/Edge: Ctrl+Shift+J (Cmd+Option+J en macOS). Firefox: Ctrl+Shift+K.'); });
 })();
 </script>
+<script>
+// ====== OneSignal integración (v16) ======
+(function setupOneSignal(){
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal){
+    try{
+      await OneSignal.init({
+        appId: "178d1464-5ebf-4faa-aba6-05990ddcc5de",
+        notifyButton: { enable: true }
+      });
+    }catch(e){ console.warn('[OneSignal] init falló', e); }
+    updateOneSignalUI();
+  });
+
+  var btnPrompt = document.getElementById('btnOSPrompt');
+  if(btnPrompt){ btnPrompt.addEventListener('click', function(){
+    window.OneSignalDeferred.push(async function(OneSignal){
+      try{ await OneSignal.Notifications.requestPermission(); }catch(e){ console.warn('[OneSignal] requestPermission()', e); }
+      try{ if (OneSignal.Slidedown && OneSignal.Slidedown.promptPush){ await OneSignal.Slidedown.promptPush(); } }catch(e){ console.warn('[OneSignal] Slidedown', e); }
+      try{ if(OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.optIn){ await OneSignal.User.PushSubscription.optIn(); } }catch(e){ console.warn('[OneSignal] optIn', e); }
+      updateOneSignalUI();
+    });
+  }); }
+
+  var btnUnsub = document.getElementById('btnOSUnsub');
+  if(btnUnsub){ btnUnsub.addEventListener('click', function(){
+    window.OneSignalDeferred.push(async function(OneSignal){
+      try{ if(OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.optOut){ await OneSignal.User.PushSubscription.optOut(); } }catch(e){ console.warn('[OneSignal] optOut', e); }
+      updateOneSignalUI();
+    });
+  }); }
+})();
+
+async function getOneSignalInfo(){
+  return new Promise(function(resolve){
+    if(!window.OneSignalDeferred){ return resolve({ready:false}); }
+    window.OneSignalDeferred.push(async function(OneSignal){
+      var info={ready:true, subscribed:false, subId:null, permission: (Notification && Notification.permission)||'default'};
+      try{
+        if(OneSignal.User && OneSignal.User.PushSubscription){
+          if (OneSignal.User.PushSubscription.optedIn){ info.subscribed = !!OneSignal.User.PushSubscription.optedIn; }
+          if (OneSignal.User.PushSubscription.getId){
+            try{ info.subId = await OneSignal.User.PushSubscription.getId(); }catch(_){ }
+          }
+        }
+      }catch(e){ console.warn('[OneSignal] info', e); }
+      resolve(info);
+    });
+  });
+}
+
+async function updateOneSignalUI(){
+  try{
+    var info = await getOneSignalInfo();
+    var sEl=document.getElementById('osState'); var idEl=document.getElementById('osSubId');
+    if(sEl){ sEl.textContent = info.ready ? (info.subscribed? 'OneSignal: suscrito' : 'OneSignal: no suscrito') : 'OneSignal: no cargado'; }
+    if(idEl){ idEl.textContent = info.subId || '—'; }
+  }catch(e){ console.warn('[OneSignal] UI', e); }
+}
+</script>
 </body>
 </html>
-
 
