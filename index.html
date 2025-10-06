@@ -45,7 +45,7 @@ header{
   border-bottom:1px solid rgba(255,255,255,.14)
 }
 .topbar{display:flex; align-items:center; gap:12px; padding:12px 14px}
-.logo{width:36px; height:36px; border-radius:10px; background:#000; object-fit:cover}
+.logo{width:36px; height:36px; border-radius:10px; background:transparent; object-fit:contain; display:block}
 .brand{font-weight:800}
 .badge{font-size:12px; color:var(--muted)}
 .grow{flex:1}
@@ -142,7 +142,7 @@ input,select,textarea{
 <header>
   <div class="topbar">
     <button id="btnBackHome" class="btn ghost backBtn" title="Regresar al menú">← Menú principal</button>
-    <img id="appLogo" class="logo" alt="Logo">
+    <img id="appLogo" class="logo" alt="Logo" hidden>
     <div>
       <div class="brand">AutoCare Log</div>
       <div class="badge">Mantenimiento • Historial • Recordatorios</div>
@@ -435,7 +435,12 @@ function applyThemeFromPrefs(){
   if(meta) meta.setAttribute('content', mode==='dark' ? '#0d0f15' : 'transparent');
 
   if(prefs.pri) document.documentElement.style.setProperty('--pri', prefs.pri);
-  var brand=loadBrand(); if(brand.logo) { var lg=$('#appLogo'); if(lg) lg.src=brand.logo; }
+  var brand=loadBrand();
+  var lg=$('#appLogo');
+  if(lg){
+    if(brand.logo){ lg.src = brand.logo; lg.removeAttribute('hidden'); }
+    else { lg.setAttribute('hidden','hidden'); }
+  }
 
   // NUEVO: aplicar imagen y velo
   if(prefs.bgImage){ document.documentElement.style.setProperty('--bg-url', 'url("'+prefs.bgImage.replace(/"/g,'\\"')+'")'); }
@@ -463,7 +468,11 @@ function bindThemeControls(){
   var btnResetTheme=$('#btnResetTheme'); if(btnResetTheme) btnResetTheme.addEventListener('click', function(){ localStorage.removeItem(PREF); localStorage.removeItem(BRAND); location.reload(); });
   var logoFile=$('#logoFile'); if(logoFile) logoFile.addEventListener('change', function(e){
     var f=e.target.files[0]; if(!f) return;
-    fileToDataURL(f).then(function(img){ var brand=loadBrand(); brand.logo=img; saveBrand(brand); applyThemeFromPrefs(); });
+    fileToDataURL(f).then(function(img){
+      var brand=loadBrand(); brand.logo=img; saveBrand(brand);
+      var lg=$('#appLogo'); if(lg){ lg.src=img; lg.removeAttribute('hidden'); }
+      applyThemeFromPrefs();
+    });
   });
 
   // NUEVO: Controles de imagen de fondo
